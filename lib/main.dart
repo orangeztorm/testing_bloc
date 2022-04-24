@@ -1,48 +1,28 @@
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:bloc/bloc.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:testing_bloc/bloc/bloc_action.dart';
-import 'package:testing_bloc/bloc/person.dart';
-import 'package:testing_bloc/bloc/person_bloc.dart';
+import 'package:testing_bloc/api/login_api.dart';
+import 'package:testing_bloc/api/notes_api.dart';
+import 'package:testing_bloc/bloc/actions.dart';
+import 'package:testing_bloc/bloc/app_state.dart';
+import 'package:testing_bloc/dialogs/generic_dialog.dart';
+import 'package:testing_bloc/dialogs/loading_screen.dart';
+import 'package:testing_bloc/models.dart';
+import 'package:testing_bloc/strings.dart';
+import 'package:testing_bloc/views/list_iteraable.dart';
+import 'package:testing_bloc/views/login_view.dart';
+
+import 'bloc/app_bloc.dart';
 
 void main() {
-  runApp(const MyApp());
-}
-
-extension SubScript<T> on Iterable<T> {
-  T? operator [](int index) => length > index ? elementAt(index) : null;
-}
-
-
-Future<Iterable<Person>> getPersons(String url) => HttpClient()
-    .getUrl(Uri.parse(url))
-    .then((req) => req.close())
-    .then((resp) => resp.transform(utf8.decoder).join())
-    .then((str) => json.decode(str) as List<dynamic>)
-    .then((list) => list.map((e) => Person.fromJson(e)));
-
-
-
-class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
-
-  // This widget is the root of your application.
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
+  runApp(
+    MaterialApp(
       title: 'Flutter Demo',
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: BlocProvider(
-        create: (_) => PesronBloc(),
-        child: const MyHomePage(),
-      ),
-    );
-  }
+      home: const MyHomePage(),
+    ),
+  );
 }
 
 class MyHomePage extends StatefulWidget {
@@ -57,53 +37,69 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return BlocProvider(
+      create: (context) => AppBloc(loginApi: LoginApi(), notesApi: NotesApi()),
+      child: Scaffold(
         appBar: AppBar(
-          title: const Text('Home page'),
+          title: const Text(homepage),
         ),
-        body: Column(
-          children: [
-            TextButton(
-              onPressed: () {
-                context.read<PesronBloc>().add(const LoadPersonActions(
-                      url: person1Url,
-                      loader: getPersons
-                    ));
-              },
-              child: const Text('load json 1'),
-            ),
-            TextButton(
-              onPressed: () {
-                context.read<PesronBloc>().add(const LoadPersonActions(
-                     url: person2Url,
-                      loader: getPersons
-                    ));
-              },
-              child: const Text('load json 2'),
-            ),
-            BlocBuilder<PesronBloc, FetchResult?>(
-              buildWhen: (previous, current) {
-                return previous?.persons != current?.persons;
-              },
-              builder: (context, fetchedResult) {
-                final persons = fetchedResult?.persons;
-                if (persons == null) {
-                  return const SizedBox();
-                }
-                return Expanded(
-                  child: ListView.builder(
-                    itemCount: persons.length,
-                    itemBuilder: (context, index) {
-                      final person = persons[index]!;
-                      return ListTile(
-                        title: Text(person.name),
+        body: BlocConsumer<AppBloc, AppState>(
+          listener: (context, appState) {
+            // loading screen
+
+            LoadingScreen loading = LoadingScreen.instance();
+
+            if (appState.isLoading) {
+              loading.show(
+                context: context,
+                text: pleaseWait,
+              );
+            } else {
+              loading.hide();
+            }
+
+            // display multiple errors
+
+            final loginErrors = appState.loginErrors;
+            if (loginErrors != null) {
+              showGenericDialog(
+                context: context,
+                title: loginErrorDialog,
+                content: loginErrorDialogContent,
+                optionBuilder: () => {ok: true},
+              );
+            }
+
+            // if we are logged in but have no fetched notes, fetch them now
+
+            if (appState.isLoading == false &&
+                appState.loginErrors == null &&
+                appState.loginHandle == const LoginHandle.foobar() &&
+                appState.fetchedNotes == null) {
+              context.read<AppBloc>().add(
+                    const LoadNoteAction(),
+                  );
+            }
+          },
+          builder: (context, appState) {
+            final notes = appState.fetchedNotes;
+            if (notes == null) {
+              return LoginView(
+                onLoginTapped: (email, password) {
+                  context.read<AppBloc>().add(
+                        LoginAction(
+                          email: email,
+                          password: password,
+                        ),
                       );
-                    },
-                  ),
-                );
-              },
-            )
-          ],
-        ));
+                },
+              );
+            } else {
+              return notes.toListView();
+            }
+          },
+        ),
+      ),
+    );
   }
 }
