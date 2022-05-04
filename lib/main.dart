@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:testing_bloc/views/home_page.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:testing_bloc/firebase_options.dart';
+import 'package:testing_bloc/views/app.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+  options: DefaultFirebaseOptions.currentPlatform,
+);
   runApp(
-    MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      home: const HomePage(),
-    ),
+    const App(),
   );
 }
 
